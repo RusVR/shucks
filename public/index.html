@@ -3,71 +3,18 @@
 <head>
     <title>Shucks</title>
     <style>
-        body {
-            font-family: Arial;
-            transition: background 0.3s, color 0.3s;
-            margin: 20px;
-        }
-
-        #chat {
-            border: 1px solid;
-            height: 300px;
-            overflow-y: auto;
-            margin-bottom: 10px;
-            padding: 5px;
-        }
-
-        #chat p {
-            display: flex;
-            align-items: center;
-            gap: 5px;
-        }
-
-        #chat img {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-        }
-
-        #chat .timestamp {
-            font-size: 0.7em;
-            color: gray;
-        }
-
-        button {
-            margin-left: 5px;
-            padding: 5px 10px;
-        }
-
-        input[type=text] {
-            width: 60%;
-            padding: 5px;
-        }
-
-        input[type=file] {
-            display: none;
-        }
-
-        .dark {
-            background-color: #1e1e1e;
-            color: #ffffff;
-        }
-
-        .dark #chat {
-            border-color: #555;
-        }
-
-        .dark input {
-            background-color: #333;
-            color: white;
-            border: 1px solid #555;
-        }
-
-        .dark button {
-            background-color: #333;
-            color: white;
-            border: 1px solid #555;
-        }
+        body { font-family: Arial; transition: background 0.3s, color 0.3s; margin: 20px; }
+        #chat { border:1px solid; height:300px; overflow-y:auto; margin-bottom:10px; padding:5px; }
+        #chat p { display:flex; align-items:center; gap:5px; }
+        #chat img { width:24px; height:24px; border-radius:50%; }
+        #chat .timestamp { font-size:0.7em; color:gray; }
+        button { margin-left:5px; padding:5px 10px; }
+        input[type=text] { width:60%; padding:5px; }
+        input[type=file] { display:none; }
+        .dark { background-color:#1e1e1e; color:#fff; }
+        .dark #chat { border-color:#555; }
+        .dark input { background-color:#333; color:white; border:1px solid #555; }
+        .dark button { background-color:#333; color:white; border:1px solid #555; }
     </style>
 </head>
 <body>
@@ -85,104 +32,176 @@
 
 <input type="file" id="profilePicInput" accept="image/*" />
 
+<!-- Voice Call UI -->
+<div id="callControls">
+    <h3>Voice Calls</h3>
+    <div id="usersList"></div>
+    <div id="incomingCall" style="display:none;">
+        <span id="incomingCallText"></span>
+        <button id="acceptCallBtn">Accept</button>
+        <button id="declineCallBtn">Decline</button>
+    </div>
+    <button id="endCallBtn" style="display:none;">End Call</button>
+</div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script>
-    const socket = io();
+const socket = io();
 
-    let username = localStorage.getItem("shucks_username");
-    let darkMode = localStorage.getItem("shucks_darkmode");
-    let profilePic = localStorage.getItem("shucks_profilePic") || "https://via.placeholder.com/24";
+// USER SETUP
+let username = localStorage.getItem("shucks_username");
+let darkMode = localStorage.getItem("shucks_darkmode");
+let profilePic = localStorage.getItem("shucks_profilePic") || "https://via.placeholder.com/24";
 
-    if (!username) {
-        username = prompt("What should we call you?");
-        if (!username || username.trim() === "") username = "User";
-        localStorage.setItem("shucks_username", username);
-    }
+if (!username) {
+    username = prompt("What should we call you?") || "User";
+    localStorage.setItem("shucks_username", username);
+}
+if(darkMode==="enabled") document.body.classList.add("dark");
 
-    if (darkMode === "enabled") document.body.classList.add("dark");
+socket.emit("set-username", username);
 
-    const chatDiv = document.getElementById("chat");
-    const input = document.getElementById("messageInput");
-    const fileInput = document.getElementById("profilePicInput");
+// CHAT HISTORY
+const chatDiv = document.getElementById("chat");
+let chatHistory = JSON.parse(localStorage.getItem("shucks_chatHistory") || "[]");
+chatHistory.forEach(item => appendMessage(item.msg,item.img,item.time));
 
-    // Load saved chat history
-    let chatHistory = JSON.parse(localStorage.getItem("shucks_chatHistory") || "[]");
-    chatHistory.forEach(item => appendMessage(item.msg, item.img, item.time));
+function appendMessage(msg,img,time){
+    const p=document.createElement("p");
+    const avatar=document.createElement("img"); avatar.src=img;
+    const text=document.createTextNode(msg+" ");
+    const timestamp=document.createElement("span"); timestamp.className="timestamp"; timestamp.textContent=time?`(${time})`:"";
+    p.appendChild(avatar); p.appendChild(text); p.appendChild(timestamp);
+    chatDiv.appendChild(p); chatDiv.scrollTop=chatDiv.scrollHeight;
+}
 
-    function appendMessage(msg, img, time) {
-        const p = document.createElement("p");
-        const avatar = document.createElement("img");
-        avatar.src = img;
-        const text = document.createTextNode(msg + " ");
-        const timestamp = document.createElement("span");
-        timestamp.className = "timestamp";
-        timestamp.textContent = time ? `(${time})` : "";
-        p.appendChild(avatar);
-        p.appendChild(text);
-        p.appendChild(timestamp);
-        chatDiv.appendChild(p);
-        chatDiv.scrollTop = chatDiv.scrollHeight;
-    }
+function sendMessage(){
+    const message=document.getElementById("messageInput").value;
+    if(!message.trim()) return;
+    const now=new Date();
+    const time=now.getHours().toString().padStart(2,"0")+":"+now.getMinutes().toString().padStart(2,"0");
+    const fullMessage=username+": "+message;
+    const data={msg:fullMessage,img:profilePic,time:time};
+    socket.emit("chat message", data);
+    document.getElementById("messageInput").value="";
+}
 
-    function sendMessage() {
-        const message = input.value;
-        if (!message.trim()) return;
-        const now = new Date();
-        const time = now.getHours().toString().padStart(2,'0') + ":" + now.getMinutes().toString().padStart(2,'0');
-        const fullMessage = username + ": " + message;
-        const messageData = { msg: fullMessage, img: profilePic, time: time };
+socket.on("chat message", data=>{
+    appendMessage(data.msg,data.img,data.time);
+    chatHistory.push(data);
+    localStorage.setItem("shucks_chatHistory", JSON.stringify(chatHistory));
+});
 
-        socket.emit("chat message", messageData);
-        input.value = "";
-    }
+// USERNAME & PROFILE PIC
+function changeUsername(){
+    let newName=prompt("Enter new username:");
+    if(!newName||newName.trim()==="") return alert("Username cannot be empty.");
+    username=newName; localStorage.setItem("shucks_username",username); socket.emit("set-username",username);
+}
 
-    socket.on("chat message", (data) => {
-        appendMessage(data.msg, data.img, data.time);
+const fileInput=document.getElementById("profilePicInput");
+function triggerProfilePicUpload(){ fileInput.click(); }
+fileInput.addEventListener("change",function(){
+    const file=this.files[0]; if(!file) return;
+    const reader=new FileReader();
+    reader.onload=function(e){ profilePic=e.target.result; localStorage.setItem("shucks_profilePic",profilePic); alert("Profile picture updated!"); }
+    reader.readAsDataURL(file);
+});
 
-        // Save to history
-        chatHistory.push({ msg: data.msg, img: data.img, time: data.time });
-        localStorage.setItem("shucks_chatHistory", JSON.stringify(chatHistory));
+// DARK MODE
+function toggleDarkMode(){
+    document.body.classList.toggle("dark");
+    localStorage.setItem("shucks_darkmode", document.body.classList.contains("dark")?"enabled":"disabled");
+}
+
+// ENTER KEY SEND
+document.getElementById("messageInput").addEventListener("keydown",e=>{ if(e.key==="Enter"){e.preventDefault(); sendMessage(); } });
+
+// VOICE CALLS
+const peers={};
+let localStream;
+let inCall=false;
+let connectedUsers=new Set();
+
+navigator.mediaDevices.getUserMedia({audio:true}).then(stream=>{localStream=stream;}).catch(()=>alert("Microphone access required!"));
+
+const usersListDiv=document.getElementById("usersList");
+const incomingCallDiv=document.getElementById("incomingCall");
+const incomingCallText=document.getElementById("incomingCallText");
+const acceptCallBtn=document.getElementById("acceptCallBtn");
+const declineCallBtn=document.getElementById("declineCallBtn");
+const endCallBtn=document.getElementById("endCallBtn");
+
+// Update user list buttons
+socket.on("update-user-list", users=>{
+    usersListDiv.innerHTML="";
+    Object.entries(users).forEach(([id,name])=>{
+        if(id===socket.id) return;
+        const btn=document.createElement("button");
+        btn.textContent=name;
+        btn.onclick=()=>startCall(id);
+        usersListDiv.appendChild(btn);
     });
+});
 
-    function changeUsername() {
-        let newName = prompt("Enter your new username:");
-        if (!newName || newName.trim() === "") return alert("Username cannot be empty.");
-        username = newName;
-        localStorage.setItem("shucks_username", username);
-    }
+// CALL FUNCTIONS
+function createPeerConnection(id){
+    const peer=new RTCPeerConnection();
+    peer.ontrack=e=>{
+        let audio=document.getElementById(`audio-${id}`);
+        if(!audio){ audio=document.createElement("audio"); audio.id=`audio-${id}`; audio.autoplay=true; document.body.appendChild(audio); }
+        audio.srcObject=e.streams[0];
+    };
+    peer.onicecandidate=e=>{ if(e.candidate) socket.emit("webrtc-ice-candidate",{to:id,candidate:e.candidate}); };
+    return peer;
+}
 
-    function triggerProfilePicUpload() {
-        fileInput.click();
-    }
+function startCall(toId){
+    if(inCall) return; inCall=true; connectedUsers.add(toId); endCallBtn.style.display="inline-block";
+    const peer=createPeerConnection(toId); peers[toId]=peer;
+    localStream.getTracks().forEach(track=>peer.addTrack(track,localStream));
+    peer.createOffer().then(offer=>{ peer.setLocalDescription(offer); socket.emit("webrtc-offer",{to:toId,sdp:offer}); });
+}
 
-    fileInput.addEventListener("change", function() {
-        const file = this.files[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = function(e) {
-            profilePic = e.target.result;
-            localStorage.setItem("shucks_profilePic", profilePic);
-            alert("Profile picture updated!");
-        };
-        reader.readAsDataURL(file);
-    });
+socket.on("incoming-call", data=>{
+    if(inCall) return;
+    incomingCallText.textContent=`Incoming call from ${data.username}`;
+    incomingCallDiv.style.display="block";
+    acceptCallBtn.onclick=()=>acceptCall(data.from);
+    declineCallBtn.onclick=()=>{ incomingCallDiv.style.display="none"; };
+});
 
-    function toggleDarkMode() {
-        document.body.classList.toggle("dark");
-        if (document.body.classList.contains("dark")) {
-            localStorage.setItem("shucks_darkmode", "enabled");
-        } else {
-            localStorage.setItem("shucks_darkmode", "disabled");
-        }
-    }
+function acceptCall(fromId){
+    incomingCallDiv.style.display="none"; inCall=true; connectedUsers.add(fromId); endCallBtn.style.display="inline-block";
+    const peer=createPeerConnection(fromId); peers[fromId]=peer;
+    localStream.getTracks().forEach(track=>peer.addTrack(track,localStream));
+    socket.emit("accept-call",{to:fromId});
+}
 
-    input.addEventListener("keydown", function(e) {
-        if (e.key === "Enter") {
-            e.preventDefault();
-            sendMessage();
-        }
-    });
+socket.on("call-accepted", data=>{});
+
+socket.on("webrtc-offer", async data=>{
+    const peer=peers[data.from]||createPeerConnection(data.from); peers[data.from]=peer;
+    localStream.getTracks().forEach(track=>peer.addTrack(track,localStream));
+    await peer.setRemoteDescription(new RTCSessionDescription(data.sdp));
+    const answer=await peer.createAnswer(); await peer.setLocalDescription(answer);
+    socket.emit("webrtc-answer",{to:data.from,sdp:answer});
+});
+
+socket.on("webrtc-answer", async data=>{
+    const peer=peers[data.from]; if(peer) await peer.setRemoteDescription(new RTCSessionDescription(data.sdp));
+});
+
+socket.on("webrtc-ice-candidate", data=>{
+    const peer=peers[data.from]; if(peer) peer.addIceCandidate(new RTCIceCandidate(data.candidate));
+});
+
+// END CALL
+endCallBtn.onclick=()=>{
+    connectedUsers.forEach(id=>{ if(peers[id]) peers[id].close(); const audio=document.getElementById(`audio-${id}`); if(audio) audio.remove(); });
+    Object.keys(peers).forEach(id=>delete peers[id]);
+    connectedUsers.clear(); inCall=false; endCallBtn.style.display="none";
+};
 </script>
-
 </body>
 </html>
