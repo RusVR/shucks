@@ -29,6 +29,11 @@
             border-radius: 50%;
         }
 
+        #chat .timestamp {
+            font-size: 0.7em;
+            color: gray;
+        }
+
         button {
             margin-left: 5px;
             padding: 5px 10px;
@@ -100,12 +105,21 @@
     const input = document.getElementById("messageInput");
     const fileInput = document.getElementById("profilePicInput");
 
-    function appendMessage(msg, img) {
+    // Load saved chat history
+    let chatHistory = JSON.parse(localStorage.getItem("shucks_chatHistory") || "[]");
+    chatHistory.forEach(item => appendMessage(item.msg, item.img, item.time));
+
+    function appendMessage(msg, img, time) {
         const p = document.createElement("p");
         const avatar = document.createElement("img");
         avatar.src = img;
+        const text = document.createTextNode(msg + " ");
+        const timestamp = document.createElement("span");
+        timestamp.className = "timestamp";
+        timestamp.textContent = time ? `(${time})` : "";
         p.appendChild(avatar);
-        p.appendChild(document.createTextNode(msg));
+        p.appendChild(text);
+        p.appendChild(timestamp);
         chatDiv.appendChild(p);
         chatDiv.scrollTop = chatDiv.scrollHeight;
     }
@@ -113,13 +127,21 @@
     function sendMessage() {
         const message = input.value;
         if (!message.trim()) return;
+        const now = new Date();
+        const time = now.getHours().toString().padStart(2,'0') + ":" + now.getMinutes().toString().padStart(2,'0');
         const fullMessage = username + ": " + message;
-        socket.emit("chat message", { msg: fullMessage, img: profilePic });
+        const messageData = { msg: fullMessage, img: profilePic, time: time };
+
+        socket.emit("chat message", messageData);
         input.value = "";
     }
 
     socket.on("chat message", (data) => {
-        appendMessage(data.msg, data.img);
+        appendMessage(data.msg, data.img, data.time);
+
+        // Save to history
+        chatHistory.push({ msg: data.msg, img: data.img, time: data.time });
+        localStorage.setItem("shucks_chatHistory", JSON.stringify(chatHistory));
     });
 
     function changeUsername() {
@@ -138,7 +160,7 @@
         if (!file) return;
         const reader = new FileReader();
         reader.onload = function(e) {
-            profilePic = e.target.result; // base64 string
+            profilePic = e.target.result;
             localStorage.setItem("shucks_profilePic", profilePic);
             alert("Profile picture updated!");
         };
