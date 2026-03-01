@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Shucks</title>
+    <style>
+        body {
+            font-family: Arial;
+            transition: background 0.3s, color 0.3s;
+            margin: 20px;
+        }
+
+        #chat {
+            border: 1px solid;
+            height: 300px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+            padding: 5px;
+        }
+
+        button {
+            margin-left: 5px;
+            padding: 5px 10px;
+        }
+
+        input {
+            width: 70%;
+            padding: 5px;
+        }
+
+        /* DARK MODE STYLES */
+        .dark {
+            background-color: #1e1e1e;
+            color: #ffffff;
+        }
+
+        .dark #chat {
+            border-color: #555;
+        }
+
+        .dark input {
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+        }
+
+        .dark button {
+            background-color: #333;
+            color: white;
+            border: 1px solid #555;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Shucks</h1>
+
+    <button onclick="changeUsername()">Change Username</button>
+    <button onclick="toggleDarkMode()">Toggle Dark Mode</button>
+
+    <div id="chat"></div>
+
+    <input id="messageInput" placeholder="Type something..." />
+    <button onclick="sendMessage()">Send</button>
+
+    <!-- Socket.io library -->
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+
+        // Username & Dark Mode
+        let username = localStorage.getItem("shucks_username");
+        let darkMode = localStorage.getItem("shucks_darkmode");
+
+        if (!username) {
+            username = prompt("What should we call you?");
+            if (!username || username.trim() === "") username = "User";
+            localStorage.setItem("shucks_username", username);
+        }
+
+        if (darkMode === "enabled") document.body.classList.add("dark");
+
+        const chatDiv = document.getElementById("chat");
+        const input = document.getElementById("messageInput");
+
+        // Append message
+        function appendMessage(msg) {
+            const p = document.createElement("p");
+            p.textContent = msg;
+            chatDiv.appendChild(p);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+
+        // Send message
+        function sendMessage() {
+            const message = input.value;
+            if (!message.trim()) return;
+            const fullMessage = username + ": " + message;
+            socket.emit("chat message", fullMessage);
+            input.value = "";
+        }
+
+        // Receive messages from server
+        socket.on("chat message", (msg) => {
+            appendMessage(msg);
+        });
+
+        // Change username
+        function changeUsername() {
+            let newName = prompt("Enter your new username:");
+            if (!newName || newName.trim() === "") {
+                alert("Username cannot be empty.");
+                return;
+            }
+            username = newName;
+            localStorage.setItem("shucks_username", username);
+        }
+
+        // Toggle dark mode
+        function toggleDarkMode() {
+            document.body.classList.toggle("dark");
+            if (document.body.classList.contains("dark")) {
+                localStorage.setItem("shucks_darkmode", "enabled");
+            } else {
+                localStorage.setItem("shucks_darkmode", "disabled");
+            }
+        }
+
+        // Send message on Enter key
+        input.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+
+</body>
+</html>
